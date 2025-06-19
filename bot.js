@@ -76,7 +76,7 @@ client.on('message', async (message) => {
                 } catch (error) {
                     console.log('Error sending message:', error);
                 }
-            }, 2000); // Kirim setiap 2 detik
+            }, 200); // Kirim setiap 2 detik
             
             activeRequests.set(chatId, {
                 interval: interval,
