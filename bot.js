@@ -1,6 +1,9 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 
+// Import keep-alive
+const { botStatus } = require('./keep-alive');
+
 const client = new Client({
     authStrategy: new LocalAuth()
 });
@@ -11,15 +14,45 @@ const activeRequests = new Map();
 client.on('qr', (qr) => {
     console.log('Scan QR Code di bawah ini:');
     qrcode.generate(qr, {small: true});
+    
+    // Update status QR
+    fetch('http://localhost:3000/api/bot-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            isRunning: true,
+            qrScanned: false
+        })
+    }).catch(err => console.log('Error updating QR status:', err));
 });
 
 client.on('ready', () => {
     console.log('Bot WhatsApp siap digunakan!');
+    
+    // Update status saat bot connect
+    fetch('http://localhost:3000/api/bot-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            isRunning: true,
+            qrScanned: true,
+            connectedNumber: client.info.wid.user
+        })
+    }).catch(err => console.log('Error updating ready status:', err));
 });
 
 client.on('message', async (message) => {
     const body = message.body.toLowerCase();
     const chatId = message.from;
+    
+    // Update message counter
+    fetch('http://localhost:3000/api/bot-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            messageCount: (botStatus.messageCount || 0) + 1
+        })
+    }).catch(err => console.log('Error updating message count:', err));
     
     // Command .req untuk memulai request
     if (body.startsWith('.req ')) {
@@ -151,6 +184,22 @@ client.on('message', async (message) => {
     }
 });
 
+// Handle disconnect
+client.on('disconnected', (reason) => {
+    console.log('Bot disconnected:', reason);
+    
+    // Update status disconnect
+    fetch('http://localhost:3000/api/bot-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            isRunning: false,
+            qrScanned: false,
+            connectedNumber: null
+        })
+    }).catch(err => console.log('Error updating disconnect status:', err));
+});
+
 // Cleanup saat bot dimatikan
 process.on('SIGINT', () => {
     console.log('Membersihkan request yang aktif...');
@@ -158,6 +207,18 @@ process.on('SIGINT', () => {
         clearInterval(request.interval);
     });
     activeRequests.clear();
+    
+    // Update status saat shutdown
+    fetch('http://localhost:3000/api/bot-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            isRunning: false,
+            qrScanned: false,
+            connectedNumber: null
+        })
+    }).catch(err => console.log('Error updating shutdown status:', err));
+    
     process.exit();
 });
 
